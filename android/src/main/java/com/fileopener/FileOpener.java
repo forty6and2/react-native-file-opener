@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.support.v4.content.FileProvider;
 
 import org.json.JSONArray;
@@ -43,24 +44,46 @@ public class FileOpener extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void open(String fileArg, String contentType, Promise promise) throws JSONException {
-  		File file = new File(fileArg);
-
-  		if (file.exists()) {
-  			try {
-          Uri path = FileProvider.getUriForFile(getReactApplicationContext(), getReactApplicationContext().getPackageName() + ".fileprovider", file);
-  				Intent intent = new Intent(Intent.ACTION_VIEW);
-  				intent.setDataAndType(path, contentType);
-          intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-          intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-  				getReactApplicationContext().startActivity(intent);
-
-                promise.resolve("Open success!!");
-  			} catch (android.content.ActivityNotFoundException e) {
-                promise.reject("Open error!!");
-  			}
-  		} else {
-            promise.reject("File not found");
-  		}
-  	}
+    File file = new File(fileArg);
+    if (!file.exists()) {
+      promise.reject("file");
+    }
+    try {
+      Intent intent;
+      if (Build.VERSION.SDK_INT >= 24) {
+        Uri fileURI = FileProvider.getUriForFile(getReactApplicationContext(), getReactApplicationContext().getPackageName() + ".provider", file);
+        intent = new Intent(Intent.ACTION_VIEW).setDataAndType(fileURI, contentType);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        PackageManager pm = getCurrentActivity().getPackageManager();
+        if (intent.resolveActivity(pm) == null) {
+          // set intent to null in order to reject the promise in the next step
+          intent = null;
+        }
+      } else {
+        Uri fileURI = Uri.parse("file://" + fileArg);
+        intent = new Intent(Intent.ACTION_VIEW).setDataAndType(fileURI, contentType);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      }
+      if (intent != null) {
+        this.getReactApplicationContext().startActivity(intent);
+        promise.resolve("success");
+      }
+      else {
+        promise.reject("application");
+      }
+      // ***
+      // Uri fileURI = FileProvider.getUriForFile(getReactApplicationContext(), getReactApplicationContext().getPackageName() + ".provider", file);
+      // Intent intent = new Intent(Intent.ACTION_VIEW);
+      // intent.setDataAndType(path, contentType);
+      // intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      // intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      // getReactApplicationContext().startActivity(intent);
+      // promise.resolve("success");
+      // ***
+    } catch (android.content.ActivityNotFoundException e) {
+      // no application can handle the file type
+      promise.reject("application");
+    }
+  }
 
 }
